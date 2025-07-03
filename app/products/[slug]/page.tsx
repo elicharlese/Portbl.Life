@@ -1,162 +1,181 @@
-import { Suspense } from "react"
+"use client"
+
+import { useState, useEffect } from "react"
+import { notFound } from "next/navigation"
 import ProductGallery from "@/components/products/ProductGallery"
 import ProductInfo from "@/components/products/ProductInfo"
 import ProductUpsells from "@/components/products/ProductUpsells"
 import SuggestedProducts from "@/components/products/SuggestedProducts"
 import ProductTabs from "@/components/products/ProductTabs"
+import { useProduct, useProducts } from "@/lib/hooks/useProducts"
+import { ProductDetailSkeleton } from "@/components/ui/loading"
+import { ErrorDisplay } from "@/components/ui/error"
 
-// This would normally come from Shopify's API
-const getProductBySlug = (slug: string) => {
-  // Mock product data
-  return {
-    id: "prod-1",
-    title: "Nomad Backpack Pro",
-    slug: "nomad-backpack-pro",
-    price: "129.99",
-    compareAtPrice: "159.99",
-    description:
-      "The ultimate backpack for digital nomads. Designed with multiple compartments for your laptop, tech accessories, and travel essentials. Water-resistant material and ergonomic design for all-day comfort.",
-    features: [
-      "Water-resistant ripstop nylon",
-      'Padded laptop sleeve (fits up to 16")',
-      "Hidden anti-theft pocket",
-      "Ergonomic shoulder straps",
-      "Luggage pass-through sleeve",
-      "Capacity: 28L",
-    ],
-    images: [
-      "/placeholder.svg?height=600&width=600",
-      "/placeholder.svg?height=600&width=600",
-      "/placeholder.svg?height=600&width=600",
-      "/placeholder.svg?height=600&width=600",
-    ],
-    variants: [
-      {
-        id: "var-1",
-        title: "Midnight Black",
-        price: "129.99",
-        available: true,
-      },
-      {
-        id: "var-2",
-        title: "Navy Blue",
-        price: "129.99",
-        available: true,
-      },
-      {
-        id: "var-3",
-        title: "Forest Green",
-        price: "129.99",
-        available: false,
-      },
-    ],
+interface ProductPageProps {
+  params: { slug: string }
+}
+
+export default function ProductPage({ params }: ProductPageProps) {
+  const { product, loading, error, refresh } = useProduct(params.slug)
+  const { 
+    products: suggestedProducts, 
+    loading: suggestedLoading,
+    error: suggestedError,
+    refresh: refreshSuggested
+  } = useProducts({ 
+    limit: 4,
+    initialLoad: false
+  })
+
+  useEffect(() => {
+    // Load suggested products when we have the main product
+    if (product && !suggestedLoading && suggestedProducts.length === 0) {
+      refreshSuggested()
+    }
+  }, [product, suggestedLoading, suggestedProducts.length, refreshSuggested])
+
+  if (loading) {
+    return <ProductDetailSkeleton />
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <ErrorDisplay
+          error={error}
+          title="Failed to load product"
+          onRetry={refresh}
+        />
+      </div>
+    )
+  }
+
+  if (!product) {
+    notFound()
+  }
+
+  // Get upsell products based on product tags or category
+  const getUpsellProducts = () => {
+    const relatedProducts = suggestedProducts
+      .filter(p => 
+        p.id !== product.id && 
+        p.tags.some(tag => product.tags.includes(tag))
+      )
+      .slice(0, 2)
+      .map(p => ({
+        id: p.id,
+        slug: p.slug,
+        title: p.title,
+        price: p.variants[0]?.price || 0,
+        image: p.images[0]?.url || '',
+        variant: p.variants[0]
+      }))
+
+    return relatedProducts
+  }
+
+  const formatProductForTabs = (product: any) => ({
+    description: product.description || '',
+    features: extractFeatures(product.description || ''),
     specifications: {
-      dimensions: '18" x 12" x 8"',
-      weight: "2.2 lbs",
-      material: "Ripstop Nylon, YKK Zippers",
-      warranty: "Lifetime warranty against manufacturing defects",
+      vendor: product.vendor || 'Portbl',
+      productType: product.productType || 'Product',
+      tags: product.tags.join(', '),
+      createdAt: new Date(product.createdAt).toLocaleDateString(),
+      sku: product.variants[0]?.sku || 'N/A',
+      weight: product.variants[0]?.weight ? `${product.variants[0].weight} ${product.variants[0].weightUnit}` : 'N/A',
     },
     care: "Spot clean with mild detergent and water. Do not machine wash. Air dry only.",
     shipping: "Free standard shipping on orders over $75. Expedited shipping available at checkout.",
     reviews: {
-      average: 4.8,
-      count: 124,
+      average: product.averageRating || 0,
+      count: product.reviewCount || 0,
     },
+  })
+
+  const extractFeatures = (description: string): string[] => {
+    // Simple feature extraction from description
+    const sentences = description.split('.').filter(s => s.trim().length > 0)
+    return sentences.slice(0, 5).map(s => s.trim())
   }
-}
 
-// This would normally come from Shopify's API
-const getUpsellProducts = () => {
-  return [
-    {
-      id: "ups-1",
-      title: "Tech Organizer",
-      price: "29.99",
-      image: "/placeholder.svg?height=200&width=200",
-    },
-    {
-      id: "ups-2",
-      title: "Water Bottle Holder",
-      price: "14.99",
-      image: "/placeholder.svg?height=200&width=200",
-    },
-  ]
-}
+  const formatProductForInfo = (product: any) => ({
+    ...product,
+    price: product.variants[0]?.price?.toString() || '0',
+    compareAtPrice: product.variants[0]?.compareAtPrice?.toString() || null,
+    variants: product.variants.map((v: any) => ({
+      id: v.id,
+      title: v.title,
+      price: v.price.toString(),
+      available: v.inventory > 0,
+      inventory: v.inventory,
+      options: v.options
+    })),
+    reviews: {
+      average: product.averageRating || 0,
+      count: product.reviewCount || 0,
+    }
+  })
 
-// This would normally come from Shopify's API
-const getSuggestedProducts = () => {
-  return [
-    {
-      id: "sug-1",
-      title: "Travel Packing Cubes (Set of 5)",
-      price: "34.99",
-      compareAtPrice: "44.99",
-      image: "/placeholder.svg?height=300&width=300",
-    },
-    {
-      id: "sug-2",
-      title: "Portable Tech Organizer",
-      price: "49.99",
-      compareAtPrice: null,
-      image: "/placeholder.svg?height=300&width=300",
-    },
-    {
-      id: "sug-3",
-      title: "Collapsible Water Bottle",
-      price: "24.99",
-      compareAtPrice: null,
-      image: "/placeholder.svg?height=300&width=300",
-    },
-    {
-      id: "sug-4",
-      title: "Travel Adapter",
-      price: "39.99",
-      compareAtPrice: "49.99",
-      image: "/placeholder.svg?height=300&width=300",
-    },
-  ]
-}
-
-export default function ProductPage({ params }: { params: { slug: string } }) {
-  const product = getProductBySlug(params.slug)
   const upsellProducts = getUpsellProducts()
-  const suggestedProducts = getSuggestedProducts()
+  const formattedProduct = formatProductForInfo(product)
+  const productForTabs = formatProductForTabs(product)
 
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-16">
         {/* Product Gallery */}
-        <Suspense fallback={<div>Loading gallery...</div>}>
-          <ProductGallery images={product.images} title={product.title} />
-        </Suspense>
+        <ProductGallery 
+          images={product.images.map(img => img.url)} 
+          title={product.title} 
+        />
 
         {/* Product Info and Upsells */}
         <div>
-          <Suspense fallback={<div>Loading product info...</div>}>
-            <ProductInfo product={product} />
-          </Suspense>
+          <ProductInfo product={formattedProduct} />
 
-          <div className="mt-8">
-            <Suspense fallback={<div>Loading upsells...</div>}>
+          {upsellProducts.length > 0 && (
+            <div className="mt-8">
               <ProductUpsells products={upsellProducts} />
-            </Suspense>
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Product Tabs (Description, Specifications, Reviews) */}
       <div className="mb-16">
-        <Suspense fallback={<div>Loading product details...</div>}>
-          <ProductTabs product={product} />
-        </Suspense>
+        <ProductTabs product={productForTabs} />
       </div>
 
       {/* Suggested Products */}
-      <div>
-        <Suspense fallback={<div>Loading suggested products...</div>}>
-          <SuggestedProducts products={suggestedProducts} />
-        </Suspense>
-      </div>
+      {suggestedProducts.length > 0 && (
+        <div>
+          <SuggestedProducts 
+            products={suggestedProducts
+              .filter(p => p.id !== product.id)
+              .slice(0, 4)
+              .map(p => ({
+                id: p.id,
+                slug: p.slug,
+                title: p.title,
+                price: p.variants[0]?.price?.toString() || '0',
+                compareAtPrice: p.variants[0]?.compareAtPrice?.toString() || null,
+                image: p.images[0]?.url || '',
+              }))
+            }
+          />
+        </div>
+      )}
+
+      {suggestedError && (
+        <div className="mt-8">
+          <ErrorDisplay
+            error={suggestedError}
+            title="Failed to load suggested products"
+            onRetry={refreshSuggested}
+          />
+        </div>
+      )}
     </div>
   )
 }

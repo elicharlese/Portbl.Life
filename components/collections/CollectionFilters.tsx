@@ -1,31 +1,67 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { ChevronDown } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Slider } from "@/components/ui/slider"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+
+interface Filters {
+  category: string
+  priceMin: number
+  priceMax: number
+  tags: string[]
+  sortBy: string
+  sortOrder: 'asc' | 'desc'
+}
+
+interface CollectionFiltersProps {
+  filters: Filters
+  onFilterChange: (filters: Partial<Filters>) => void
+  totalCount: number
+}
 
 const categories = [
-  { id: "backpacks", name: "Backpacks", count: 12 },
-  { id: "tech", name: "Tech Accessories", count: 18 },
-  { id: "apparel", name: "Apparel", count: 24 },
-  { id: "accessories", name: "Accessories", count: 15 },
-  { id: "organization", name: "Organization", count: 9 },
+  { id: "backpacks", name: "Backpacks" },
+  { id: "tech", name: "Tech Accessories" },
+  { id: "apparel", name: "Apparel" },
+  { id: "accessories", name: "Accessories" },
+  { id: "organization", name: "Organization" },
 ]
 
-const priceRanges = [
-  { id: "under-25", name: "Under $25", count: 8 },
-  { id: "25-50", name: "$25 to $50", count: 15 },
-  { id: "50-100", name: "$50 to $100", count: 22 },
-  { id: "100-200", name: "$100 to $200", count: 12 },
-  { id: "over-200", name: "Over $200", count: 5 },
+const availableTags = [
+  "Travel", "Outdoor", "Tech", "Organization", "Lightweight", 
+  "Waterproof", "Durable", "Compact", "Professional", "Casual"
 ]
 
-export default function CollectionFilters() {
+const sortOptions = [
+  { value: 'created_at', label: 'Newest First', order: 'desc' },
+  { value: 'created_at', label: 'Oldest First', order: 'asc' },
+  { value: 'title', label: 'Name A-Z', order: 'asc' },
+  { value: 'title', label: 'Name Z-A', order: 'desc' },
+  { value: 'price', label: 'Price Low to High', order: 'asc' },
+  { value: 'price', label: 'Price High to Low', order: 'desc' },
+]
+
+export default function CollectionFilters({ 
+  filters, 
+  onFilterChange, 
+  totalCount 
+}: CollectionFiltersProps) {
   const [expandedSections, setExpandedSections] = useState({
+    sort: true,
     categories: true,
     price: true,
-    color: false,
-    size: false,
+    tags: false,
   })
+
+  const [localPriceRange, setLocalPriceRange] = useState([filters.priceMin, filters.priceMax])
+
+  useEffect(() => {
+    setLocalPriceRange([filters.priceMin, filters.priceMax])
+  }, [filters.priceMin, filters.priceMax])
 
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections({
@@ -34,12 +70,95 @@ export default function CollectionFilters() {
     })
   }
 
+  const handleCategoryChange = (categoryId: string) => {
+    onFilterChange({
+      category: filters.category === categoryId ? '' : categoryId
+    })
+  }
+
+  const handleTagChange = (tag: string, checked: boolean) => {
+    const newTags = checked 
+      ? [...filters.tags, tag]
+      : filters.tags.filter(t => t !== tag)
+    
+    onFilterChange({ tags: newTags })
+  }
+
+  const handlePriceChange = (value: number[]) => {
+    setLocalPriceRange(value)
+  }
+
+  const handlePriceCommit = (value: number[]) => {
+    onFilterChange({
+      priceMin: value[0],
+      priceMax: value[1]
+    })
+  }
+
+  const handleSortChange = (value: string) => {
+    const [sortBy, sortOrder] = value.split('-')
+    onFilterChange({
+      sortBy,
+      sortOrder: sortOrder as 'asc' | 'desc'
+    })
+  }
+
+  const clearAllFilters = () => {
+    onFilterChange({
+      category: '',
+      priceMin: 0,
+      priceMax: 1000,
+      tags: [],
+      sortBy: 'created_at',
+      sortOrder: 'desc'
+    })
+  }
+
+  const hasActiveFilters = filters.category || 
+    filters.priceMin > 0 || 
+    filters.priceMax < 1000 || 
+    filters.tags.length > 0
+
   return (
     <div className="space-y-6">
+      {/* Sort */}
       <div>
         <button
+          onClick={() => toggleSection("sort")}
+          className="flex justify-between items-center w-full font-medium mb-3"
+        >
+          Sort By
+          <ChevronDown
+            className={`h-5 w-5 transition-transform ${expandedSections.sort ? "transform rotate-180" : ""}`}
+          />
+        </button>
+        {expandedSections.sort && (
+          <Select 
+            value={`${filters.sortBy}-${filters.sortOrder}`}
+            onValueChange={handleSortChange}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select sort order" />
+            </SelectTrigger>
+            <SelectContent>
+              {sortOptions.map((option) => (
+                <SelectItem 
+                  key={`${option.value}-${option.order}`} 
+                  value={`${option.value}-${option.order}`}
+                >
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+
+      {/* Categories */}
+      <div className="border-t border-border pt-6">
+        <button
           onClick={() => toggleSection("categories")}
-          className="flex justify-between items-center w-full font-medium mb-2"
+          className="flex justify-between items-center w-full font-medium mb-3"
         >
           Categories
           <ChevronDown
@@ -47,28 +166,31 @@ export default function CollectionFilters() {
           />
         </button>
         {expandedSections.categories && (
-          <div className="space-y-2 ml-1">
+          <div className="space-y-3">
             {categories.map((category) => (
-              <div key={category.id} className="flex items-center">
-                <input
-                  type="checkbox"
+              <div key={category.id} className="flex items-center space-x-2">
+                <Checkbox
                   id={`category-${category.id}`}
-                  className="h-4 w-4 text-primary border-border rounded focus:ring-primary"
+                  checked={filters.category === category.id}
+                  onCheckedChange={() => handleCategoryChange(category.id)}
                 />
-                <label htmlFor={`category-${category.id}`} className="ml-2 text-sm text-foreground flex-grow">
+                <Label 
+                  htmlFor={`category-${category.id}`} 
+                  className="text-sm font-normal cursor-pointer"
+                >
                   {category.name}
-                </label>
-                <span className="text-xs text-muted-foreground">({category.count})</span>
+                </Label>
               </div>
             ))}
           </div>
         )}
       </div>
 
+      {/* Price Range */}
       <div className="border-t border-border pt-6">
         <button
           onClick={() => toggleSection("price")}
-          className="flex justify-between items-center w-full font-medium mb-2"
+          className="flex justify-between items-center w-full font-medium mb-3"
         >
           Price Range
           <ChevronDown
@@ -76,87 +198,74 @@ export default function CollectionFilters() {
           />
         </button>
         {expandedSections.price && (
-          <div className="space-y-2 ml-1">
-            {priceRanges.map((range) => (
-              <div key={range.id} className="flex items-center">
-                <input
-                  type="checkbox"
-                  id={`price-${range.id}`}
-                  className="h-4 w-4 text-primary border-border rounded focus:ring-primary"
-                />
-                <label htmlFor={`price-${range.id}`} className="ml-2 text-sm text-foreground flex-grow">
-                  {range.name}
-                </label>
-                <span className="text-xs text-muted-foreground">({range.count})</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="border-t border-border pt-6">
-        <button
-          onClick={() => toggleSection("color")}
-          className="flex justify-between items-center w-full font-medium mb-2"
-        >
-          Color
-          <ChevronDown
-            className={`h-5 w-5 transition-transform ${expandedSections.color ? "transform rotate-180" : ""}`}
-          />
-        </button>
-        {expandedSections.color && (
-          <div className="space-y-3 ml-1">
-            <div className="flex flex-wrap gap-2">
-              {["Black", "Navy", "Gray", "Green", "Brown", "Red"].map((color) => (
-                <div key={color} className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id={`color-${color.toLowerCase()}`}
-                    className="h-4 w-4 text-primary border-border rounded focus:ring-primary"
-                  />
-                  <label htmlFor={`color-${color.toLowerCase()}`} className="ml-2 text-sm text-foreground">
-                    {color}
-                  </label>
-                </div>
-              ))}
+          <div className="space-y-4">
+            <div className="px-2">
+              <Slider
+                value={localPriceRange}
+                onValueChange={handlePriceChange}
+                onValueCommit={handlePriceCommit}
+                max={1000}
+                min={0}
+                step={10}
+                className="w-full"
+              />
+            </div>
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>${localPriceRange[0]}</span>
+              <span>${localPriceRange[1]}</span>
             </div>
           </div>
         )}
       </div>
 
+      {/* Tags */}
       <div className="border-t border-border pt-6">
         <button
-          onClick={() => toggleSection("size")}
-          className="flex justify-between items-center w-full font-medium mb-2"
+          onClick={() => toggleSection("tags")}
+          className="flex justify-between items-center w-full font-medium mb-3"
         >
-          Size
+          Tags
           <ChevronDown
-            className={`h-5 w-5 transition-transform ${expandedSections.size ? "transform rotate-180" : ""}`}
+            className={`h-5 w-5 transition-transform ${expandedSections.tags ? "transform rotate-180" : ""}`}
           />
         </button>
-        {expandedSections.size && (
-          <div className="space-y-2 ml-1">
-            {["Small", "Medium", "Large", "X-Large"].map((size) => (
-              <div key={size} className="flex items-center">
-                <input
-                  type="checkbox"
-                  id={`size-${size.toLowerCase()}`}
-                  className="h-4 w-4 text-primary border-border rounded focus:ring-primary"
+        {expandedSections.tags && (
+          <div className="space-y-3">
+            {availableTags.map((tag) => (
+              <div key={tag} className="flex items-center space-x-2">
+                <Checkbox
+                  id={`tag-${tag}`}
+                  checked={filters.tags.includes(tag)}
+                  onCheckedChange={(checked) => handleTagChange(tag, !!checked)}
                 />
-                <label htmlFor={`size-${size.toLowerCase()}`} className="ml-2 text-sm text-foreground">
-                  {size}
-                </label>
+                <Label 
+                  htmlFor={`tag-${tag}`} 
+                  className="text-sm font-normal cursor-pointer"
+                >
+                  {tag}
+                </Label>
               </div>
             ))}
           </div>
         )}
       </div>
 
-      <div className="border-t border-border pt-6">
-        <button className="bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium hover:bg-primary/90 transition w-full">
-          Apply Filters
-        </button>
-        <button className="mt-2 text-primary hover:underline text-sm w-full text-center">Clear All Filters</button>
+      {/* Actions */}
+      <div className="border-t border-border pt-6 space-y-3">
+        <div className="text-sm text-muted-foreground">
+          {totalCount} products found
+        </div>
+        
+        {hasActiveFilters && (
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={clearAllFilters}
+            className="w-full"
+          >
+            Clear All Filters
+          </Button>
+        )}
       </div>
     </div>
   )
